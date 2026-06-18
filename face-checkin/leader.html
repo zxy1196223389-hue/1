@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="30">
+<title>领导看板 - 考勤实时监控</title>
+<style>
+:root{color-scheme:light}*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
+.app{max-width:960px;margin:0 auto;padding:16px}
+
+.header{background:linear-gradient(135deg,#1e3a5f 0%,#2d5a8e 100%);color:#fff;padding:22px 28px;border-radius:16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 4px 20px rgba(30,58,95,0.3)}
+.header h1{font-size:22px}.header .info{font-size:12px;opacity:0.8}.header .refresh{font-size:11px;opacity:0.6}
+
+.overview{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.ov{background:#fff;border-radius:12px;padding:18px 14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.ov .num{font-size:36px;font-weight:800}.ov .lbl{font-size:12px;color:#64748b;margin-top:4px}
+.ov.total .num{color:#1e3a5f}.ov.present .num{color:#16a34a}.ov.absent .num{color:#ef4444}.ov.rate .num{color:#2563eb}
+
+.tabs{display:flex;gap:3px;background:#fff;border-radius:12px;padding:4px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.tab{flex:1;padding:10px 16px;border:none;background:transparent;border-radius:9px;cursor:pointer;font-size:14px;color:#64748b;font-family:inherit;font-weight:500;text-align:center}.tab.active{background:#1e3a5f;color:#fff;font-weight:600}
+
+.panel{display:none}.panel.open{display:block}
+.card{background:#fff;border-radius:12px;padding:18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}.card h2{font-size:16px;font-weight:600;margin-bottom:14px;color:#1e293b}
+
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px 12px;text-align:center;border-bottom:1px solid #f1f5f9}th{color:#64748b;font-weight:600;font-size:11px;background:#fafbfc;white-space:nowrap}td.name{text-align:left;font-weight:600}
+tr.present td{background:#f0fdf4}tr.absent td{background:#fef2f2}
+.present-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.present-dot.in{background:#16a34a}.present-dot.out{background:#ef4444}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}.badge.in{background:#dcfce7;color:#166534}.badge.out{background:#fee2e2;color:#dc2626}
+.check{color:#16a34a;font-size:16px}.cross{color:#cbd5e1}
+.footer{margin-top:16px;text-align:center;font-size:11px;color:#94a3b8}
+@media(max-width:600px){.overview{grid-template-columns:repeat(2,1fr)}.header{padding:16px}.tabs{overflow-x:auto}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="header">
+  <div><h1>👁 考勤实时看板</h1><div class="info" id="headerInfo"></div></div>
+  <div class="refresh">每30秒自动刷新</div>
+</div>
+
+<div class="overview">
+  <div class="ov total"><div class="num" id="totalEmp">0</div><div class="lbl">员工总数</div></div>
+  <div class="ov present"><div class="num" id="presentCnt">0</div><div class="lbl">已签到</div></div>
+  <div class="ov absent"><div class="num" id="absentCnt">0</div><div class="lbl">未签到</div></div>
+  <div class="ov rate"><div class="num" id="rate">0%</div><div class="lbl">出勤率</div></div>
+</div>
+
+<div class="tabs" id="tabBar">
+  <button class="tab active" data-t="today">📋 今日实时</button>
+  <button class="tab" data-t="week">📊 本周考勤表</button>
+</div>
+
+<!-- TODAY PANEL -->
+<div class="panel open" id="panel-today">
+  <div class="card">
+    <h2>📋 今日打卡状态</h2>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>员工</th><th>部门</th><th>状态</th><th>签到时间</th><th>人脸</th></tr></thead>
+      <tbody id="todayTbody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- WEEK PANEL -->
+<div class="panel" id="panel-week">
+  <div class="card">
+    <h2>📊 本周考勤表</h2>
+    <div class="tbl-wrap" style="font-size:11px"><table>
+      <thead id="weekThead"></thead>
+      <tbody id="weekTbody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<div class="footer">考勤实时看板 · 数据实时同步</div>
+</div>
+
+<script>
+const API='/api';
+
+async function callAPI(m,d){try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:m,...d})});return await r.json()}catch(e){return{ok:false,error:'网络错误'}}}
+
+async function loadToday(){
+  const r=await callAPI('get_leaderboard');
+  if(!r.ok)return;
+  document.getElementById('totalEmp').textContent=r.total;
+  document.getElementById('presentCnt').textContent=r.present;
+  document.getElementById('absentCnt').textContent=r.absent;
+  document.getElementById('rate').textContent=r.total>0?Math.round(r.present/r.total*100)+'%':'0%';
+  document.getElementById('headerInfo').textContent=r.project_name+' · '+r.today;
+
+  const tbody=document.getElementById('todayTbody');
+  tbody.innerHTML=r.employees.map(e=>{
+    const rowClass=e.status==='已签到'?'present':'absent';
+    const badgeClass=e.status==='已签到'?'in':'out';
+    return '<tr class="'+rowClass+'"><td class="name"><span class="present-dot '+badgeClass+'"></span>'+e.name+'</td><td>'+(e.dept||'-')+'</td><td><span class="badge '+badgeClass+'">'+e.status+'</span></td><td>'+(e.time||'—')+'</td><td>'+(e.has_face?'✅':'—')+'</td></tr>'
+  }).join('');
+}
+
+async function loadWeek(){
+  const r=await callAPI('get_leaderboard_week');
+  if(!r.ok)return;
+  const days=r.days;
+  const dayLabels=['一','二','三','四','五','六','日'];
+
+  // Header
+  let head='<tr><th>员工</th>';
+  days.forEach((d,i)=>{head+='<th>周'+dayLabels[i]+'<br><small>'+d.slice(5)+'</small></th>'});
+  head+='<th>出勤</th></tr>';
+  document.getElementById('weekThead').innerHTML=head;
+
+  // Body
+  let body='';
+  r.table.forEach(row=>{
+    body+='<tr><td class="name">'+row.name+'</td>';
+    let cnt=0;
+    days.forEach(d=>{
+      if(row[d]){body+='<td><span class="check">✅</span><br><small style="color:#64748b">'+row[d]+'</small></td>';cnt++}
+      else{body+='<td><span class="cross">—</span></td>'}
+    });
+    body+='<td><strong>'+cnt+'</strong>/7</td></tr>';
+  });
+  document.getElementById('weekTbody').innerHTML=body;
+}
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('open'));
+  document.getElementById('panel-'+t).classList.add('open');
+  if(t==='today')loadToday();if(t==='week')loadWeek();
+}
+
+async function init(){
+  document.querySelectorAll('.tab').forEach(tab=>{tab.addEventListener('click',()=>switchTab(tab.dataset.t))});
+  await loadToday();
+  loadWeek();
+}
+
+init();
+</script>
+</body>
+</html>

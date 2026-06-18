@@ -1,0 +1,5 @@
+{
+  "project_name": "人脸识别打卡",
+  "face_threshold": 0.5,
+  "public_url": "https://crouton-briskly-overcook.ngrok-free.dev"
+}
