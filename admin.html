@@ -303,37 +303,54 @@ async function handleFileUpload(evt){
 
   if(!regModels){
     try{
-      const M='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+      const M='https://cdn.jsdelivr.net/gh/kctdeveloper/faceapijs-weights-models@master/weights/';
       await Promise.all([faceapi.nets.ssdMobilenetv1.loadFromUri(M),faceapi.nets.faceLandmark68Net.loadFromUri(M),faceapi.nets.faceRecognitionNet.loadFromUri(M)]);
       regModels=true;
     }catch(e){document.getElementById('regHint').textContent='模型加载失败: '+e.message;document.getElementById('regHint').className='face-hint err';return}
   }
 
   try{
-    // Read file as image
-    const img=await createImageBitmap(file);
-    const canvas=document.getElementById('regCanvas');
-    canvas.width=img.width;canvas.height=img.height;canvas.style.display='block';
-    const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);
+    // Load as Image element for proper face detection
+    const img=new Image();img.src=URL.createObjectURL(file);
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
 
     // Show preview
     const preview=document.getElementById('regPreview');
-    preview.src=URL.createObjectURL(file);
-    preview.style.display='block';
+    preview.src=img.src;preview.style.display='block';
 
-    // Detect face in uploaded photo
-    const det=await faceapi.detectSingleFace(canvas,new faceapi.SsdMobilenetv1Options({minConfidence:0.6})).withFaceLandmarks().withFaceDescriptor();
-    if(!det){document.getElementById('regHint').textContent='❌ 照片中未检测到人脸，请换一张清晰的正面照片';document.getElementById('regHint').className='face-hint err';return}
+    // Detect face - try multiple angles by slightly rotating
+    const canvas=document.getElementById('regCanvas');
+    const allEmbeddings=[];
+    const angles=[0,-5,5,-10,10]; // 尝试多个小角度
 
-    const embedding=Array.from(det.descriptor);
-    const r=await api('register_face',{name:regStaffName,embedding});
+    for(const angle of angles){
+      canvas.width=img.width;canvas.height=img.height;canvas.style.display='none';
+      const ctx=canvas.getContext('2d');
+      ctx.save();ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(angle*Math.PI/180);
+      ctx.drawImage(img,-canvas.width/2,-canvas.height/2,canvas.width,canvas.height);ctx.restore();
+
+      const det=await faceapi.detectSingleFace(canvas,new faceapi.SsdMobilenetv1Options({minConfidence:0.4})).withFaceLandmarks().withFaceDescriptor();
+      if(det){allEmbeddings.push(Array.from(det.descriptor))}
+    }
+
+    if(allEmbeddings.length===0){
+      document.getElementById('regHint').textContent='❌ 照片中未检测到人脸，请用清晰的正面照片（光线充足、无遮挡）';
+      document.getElementById('regHint').className='face-hint err';return
+    }
+
+    // 平均所有有效 embedding
+    const avgEmb=allEmbeddings[0].map((_,i)=>allEmbeddings.reduce((s,e)=>s+e[i],0)/allEmbeddings.length);
+    const r=await api('register_face',{name:regStaffName,embedding:avgEmb});
 
     if(r.ok){
-      // Also save the photo itself
-      const photoData=canvas.toDataURL('image/jpeg',0.7);
+      // Save photo preview for display
+      const photoCanvas=document.createElement('canvas');
+      photoCanvas.width=img.width;photoCanvas.height=img.height;
+      photoCanvas.getContext('2d').drawImage(img,0,0);
+      const photoData=photoCanvas.toDataURL('image/jpeg',0.7);
       await api('upload_photo',{name:regStaffName,photo:photoData});
 
-      document.getElementById('regHint').innerHTML='✅ 人脸录入成功！'+regStaffName;
+      document.getElementById('regHint').innerHTML='✅ 人脸录入成功！'+regStaffName+' (分析 '+allEmbeddings.length+'/'+angles.length+' 角度有效)';
       document.getElementById('regHint').className='face-hint ok';
       loadStaffList();loadRegList();
     }else{
