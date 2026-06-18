@@ -77,7 +77,7 @@ function setLoad(t,p){document.getElementById('loadText').textContent=t;document
 
 async function loadModels(){
   setLoad('Downloading detection model...',15);
-  const M='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+  const M='https://cdn.jsdelivr.net/gh/kctdeveloper/faceapijs-weights-models@master/weights/';
   try{
     await faceapi.nets.ssdMobilenetv1.loadFromUri(M);
     setLoad('Downloading landmark model...',40);
