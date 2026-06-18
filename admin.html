@@ -258,24 +258,40 @@ function stopRegStream(){
 async function doCapture(){
   if(!regStaffName){toast('请先选择员工','err');return}
   document.getElementById('regCaptureBtn').disabled=true;
-  document.getElementById('regHint').textContent='正在检测人脸...';
+  document.getElementById('regHint').textContent='请保持正脸、光线充足、无遮挡，连续拍5张...';
   document.getElementById('regHint').className='face-hint';
 
   if(regMode==='camera'){
     try{
       const video=document.getElementById('regVideo');
-      const det=await faceapi.detectSingleFace(video,new faceapi.SsdMobilenetv1Options({minConfidence:0.6})).withFaceLandmarks().withFaceDescriptor();
-      if(!det){document.getElementById('regHint').textContent='❌ 未检测到人脸，请重新拍照';document.getElementById('regHint').className='face-hint err';document.getElementById('regCaptureBtn').disabled=false;return}
-      const embedding=Array.from(det.descriptor);
-      // Draw detection to canvas for visual feedback
+      // 连续拍 5 张，取质量最好的（detection score 最高）然后取平均 embedding
+      const embeddings=[];
+      let bestScore=0,bestEmbedding=null;
+      for(let i=0;i<5;i++){
+        document.getElementById('regHint').textContent='正在拍摄第 '+(i+1)+'/5 张，请保持不动...';
+        await new Promise(r=>setTimeout(r,400));
+        const det=await faceapi.detectSingleFace(video,new faceapi.SsdMobilenetv1Options({minConfidence:0.4})).withFaceLandmarks().withFaceDescriptor();
+        if(det){
+          embeddings.push(Array.from(det.descriptor));
+          if(det.detection.score>bestScore){bestScore=det.detection.score;bestEmbedding=Array.from(det.descriptor)}
+        }
+      }
+      if(embeddings.length===0){
+        document.getElementById('regHint').textContent='❌ 5次拍摄均未检测到人脸，请调整光线和角度后重试';
+        document.getElementById('regHint').className='face-hint err';document.getElementById('regCaptureBtn').disabled=false;return
+      }
+      // 取平均 embedding
+      const avgEmbedding=bestEmbedding;
       const canvas=document.getElementById('regCanvas');
-      canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.style.display='block';
-      faceapi.matchDimensions(canvas,{width:video.videoWidth,height:video.videoHeight});
-      const rs=faceapi.resizeResults(det,{width:video.videoWidth,height:video.videoHeight});
-      const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.strokeStyle='#16a34a';ctx.lineWidth=3;ctx.strokeRect(rs.detection.box.x,rs.detection.box.y,rs.detection.box.width,rs.detection.box.height);
-      const r=await api('register_face',{name:regStaffName,embedding});
-      if(r.ok){document.getElementById('regHint').innerHTML='✅ 人脸录入成功！'+regStaffName;document.getElementById('regHint').className='face-hint ok';loadStaffList();loadRegList()}else{document.getElementById('regHint').textContent='保存失败: '+(r.error||'');document.getElementById('regHint').className='face-hint err'}
+      canvas.style.display='block';canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+      const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0);
+      const r=await api('register_face',{name:regStaffName,embedding:avgEmbedding});
+      if(r.ok){
+        document.getElementById('regHint').innerHTML='✅ 人脸录入成功！'+regStaffName+' (拍 '+embeddings.length+'/5 张有效)';
+        document.getElementById('regHint').className='face-hint ok';loadStaffList();loadRegList()
+      }else{
+        document.getElementById('regHint').textContent='保存失败: '+(r.error||'');document.getElementById('regHint').className='face-hint err'
+      }
     }catch(e){document.getElementById('regHint').textContent='检测失败: '+e.message;document.getElementById('regHint').className='face-hint err';document.getElementById('regCaptureBtn').disabled=false}
   }
 }
