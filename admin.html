@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>考勤管理后台</title>
+<style>
+:root{color-scheme:light}*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
+.app{max-width:960px;margin:0 auto;padding:16px}
+.header{background:linear-gradient(135deg,#0f766e 0%,#0d9488 100%);color:#fff;padding:18px 22px;border-radius:14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;box-shadow:0 4px 16px rgba(15,118,110,0.25)}
+.header h1{font-size:20px}.header .info{font-size:12px;opacity:0.85}.header .url{font-size:12px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:6px}
+.tabs{display:flex;gap:3px;background:#fff;border-radius:12px;padding:4px;margin-bottom:14px;overflow-x:auto;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+.tab{flex:0 0 auto;padding:9px 14px;border:none;background:transparent;border-radius:9px;cursor:pointer;font-size:13px;color:#64748b;font-family:inherit;font-weight:500}.tab.active{background:#0f766e;color:#fff;font-weight:600}
+.card{background:#fff;border-radius:12px;padding:18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}.card h2{font-size:16px;font-weight:600;margin-bottom:14px;color:#1e293b}.card h3{font-size:14px;font-weight:600;margin-bottom:8px;color:#334155}
+.panel{display:none}.panel.open{display:block}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:12px}
+.stat{background:#f8fafc;border-radius:9px;padding:12px 10px;text-align:center;border:1px solid #e2e8f0}.stat .v{font-size:26px;font-weight:700;color:#0f766e}.stat .l{font-size:11px;color:#64748b}
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px 10px;text-align:left;border-bottom:1px solid #f1f5f9}th{color:#64748b;font-weight:600;font-size:11px;background:#fafbfc}tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}.badge.ok{background:#dcfce7;color:#166534}.badge.warn{background:#fef3c7;color:#92400e}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}.btn-p{background:#0f766e;color:#fff}.btn-o{background:#fff;color:#0f766e;border:1.5px solid #cbd5e1}.btn-sm{padding:5px 12px;font-size:12px;border-radius:6px}.btn-red{background:#ef4444;color:#fff}.btn-grn{background:#10b981;color:#fff}
+.inp-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}.inp-row input,.inp-row select{flex:1;min-width:100px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;outline:none}.inp-row input:focus{border-color:#0f766e}
+.dnav{display:flex;align-items:center;gap:6px;margin-bottom:12px}.dnav button{width:30px;height:30px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;color:#0f766e}
+.qr-box{text-align:center;padding:16px}.qr-box img{border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:240px}
+.emp-grid{display:grid;gap:8px}
+.emp-card{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8fafc;border-radius:9px;border:1px solid #e2e8f0;flex-wrap:wrap}
+.emp-avatar{width:52px;height:52px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:#e2e8f0;cursor:pointer}
+.emp-avatar img{width:100%;height:100%;object-fit:cover}
+.emp-info{flex:1;min-width:140px}.emp-info .ename{font-weight:600;font-size:14px}.emp-info .edept{font-size:12px;color:#64748b}
+.emp-stats{font-size:12px;color:#64748b;text-align:right;min-width:100px}.emp-stats b{color:#0f766e}
+.chart-box{position:relative;height:260px;margin:8px 0 14px}.chart-box.tall{height:320px}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-weight:600;font-size:13px;z-index:999;animation:tIn 0.25s ease,tOut 0.25s ease 2s forwards;pointer-events:none}.toast.ok{background:#10b981;color:#fff}.toast.err{background:#ef4444;color:#fff}@keyframes tIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}}@keyframes tOut{to{opacity:0;transform:translateX(-50%) translateY(-8px)}}
+
+/* Face register modal */
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-mask.show{display:flex}
+.modal-box{background:#fff;border-radius:14px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal-box video{width:100%;max-width:400px;border-radius:12px;background:#0f172a;margin:0 auto;display:block}
+.modal-box canvas{display:none}
+.modal-box .preview-img{width:100%;max-width:300px;border-radius:12px;margin:0 auto;display:block}
+.face-hint{text-align:center;font-size:13px;color:#64748b;margin:10px 0;min-height:20px}
+.face-hint.ok{color:#16a34a;font-weight:600}
+.face-hint.err{color:#ef4444}
+.empty{text-align:center;padding:36px 16px;color:#94a3b8}.empty .icon{font-size:40px}
+@media(max-width:500px){.app{padding:8px}.header{padding:14px 16px}.header h1{font-size:17px}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="header"><div><h1>👤 人脸识别考勤管理</h1><div class="info" id="headerInfo"></div></div><div class="url" id="serverUrl"></div></div>
+<div class="tabs" id="tabBar">
+<button class="tab active" data-t="today">📅 今日</button><button class="tab" data-t="week">📊 每周</button><button class="tab" data-t="month">📈 每月</button>
+<button class="tab" data-t="staff">👥 员工</button><button class="tab" data-t="register">📷 人脸录入</button><button class="tab" data-t="qr">🔗 二维码</button>
+</div>
+
+<!-- TODAY -->
+<div class="panel open" id="panel-today"><div class="card"><h2>📅 今日出勤</h2>
+<div class="dnav"><button onclick="shiftDay(-1)">◀</button><input type="date" id="dayPick" onchange="loadToday()"><button onclick="shiftDay(1)">▶</button></div>
+<div class="stats-row" id="todayStats"></div>
+<div class="tbl-wrap"><table><thead><tr><th>员工</th><th>签到时间</th><th>匹配度</th></tr></thead><tbody id="todayTbody"></tbody></table></div>
+<div class="empty" id="todayEmpty"><div class="icon">📭</div>暂无签到记录</div></div></div>
+
+<!-- WEEK -->
+<div class="panel" id="panel-week"><div class="card"><h2>📊 每周统计</h2>
+<div class="dnav"><button onclick="shiftWeek(-1)">◀</button><span id="weekLbl" style="font-weight:600;font-size:14px;flex:1;text-align:center"></span><button onclick="shiftWeek(1)">▶</button></div>
+<div class="stats-row" id="weekStats"></div><div class="chart-box"><canvas id="weekChart"></canvas></div>
+<div class="tbl-wrap"><table><thead><tr><th>日期</th><th>星期</th><th>出勤</th><th>员工</th></tr></thead><tbody id="weekTbody"></tbody></table></div></div></div>
+
+<!-- MONTH -->
+<div class="panel" id="panel-month"><div class="card"><h2>📈 每月统计</h2>
+<div class="dnav"><button onclick="shiftMonth(-1)">◀</button><input type="month" id="monthPick" onchange="loadMonth()"><button onclick="shiftMonth(1)">▶</button></div>
+<div class="stats-row" id="monthStats"></div><div class="chart-box tall"><canvas id="monthChart"></canvas></div>
+<div class="tbl-wrap"><table><thead><tr><th>日期</th><th>出勤</th><th>员工</th></tr></thead><tbody id="monthTbody"></tbody></table></div></div></div>
+
+<!-- STAFF -->
+<div class="panel" id="panel-staff"><div class="card"><h2>👥 员工管理</h2>
+<div class="inp-row"><input type="text" id="newName" placeholder="员工姓名"><input type="text" id="newDept" placeholder="部门（选填）"><button class="btn btn-p btn-sm" onclick="addStaff()">➕ 添加</button></div>
+<div class="emp-grid" id="empGrid"></div></div></div>
+
+<!-- FACE REGISTER -->
+<div class="panel" id="panel-register"><div class="card"><h2>📷 人脸录入</h2>
+<p style="font-size:12px;color:#64748b;margin-bottom:14px">为每位员工录入人脸信息。可以用摄像头拍照，也可以上传员工正面照片（JPG/PNG）。录入后员工扫码即可自动人脸识别打卡。</p>
+<div class="inp-row">
+  <select id="regStaffSelect" style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:13px"></select>
+  <button class="btn btn-p btn-sm" onclick="openRegModal('camera')">📷 摄像头拍照</button>
+  <button class="btn btn-o btn-sm" onclick="openRegModal('upload')">📁 上传照片</button>
+</div></div>
+<div class="card"><h3>已录入人脸</h3><div id="registeredList" style="font-size:13px;color:#64748b"></div></div></div>
+
+<!-- FACE REGISTER MODAL -->
+<div class="modal-mask" id="regModal">
+<div class="modal-box">
+<h3 id="regModalTitle">📷 人脸录入</h3>
+<div class="face-hint" id="regHint">请正对摄像头，确保光线充足</div>
+<video id="regVideo" autoplay playsinline muted style="display:none"></video>
+<canvas id="regCanvas" style="display:none"></canvas>
+<img id="regPreview" class="preview-img" style="display:none">
+<input type="file" id="regFileInput" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
+<div style="text-align:center;margin-top:12px">
+  <button class="btn btn-p btn-sm" id="regCaptureBtn" onclick="doCapture()" disabled>📸 拍照录入</button>
+  <button class="btn btn-o btn-sm" style="margin-left:6px" onclick="closeRegModal()">关闭</button>
+</div>
+</div></div>
+
+<!-- QR -->
+<div class="panel" id="panel-qr"><div class="card" style="background:#f0fdf4;border:1px solid #6ee7b7"><h3 style="color:#065f46">✅ ngrok 自动配置</h3><p style="font-size:12px;color:#047857;line-height:1.6">启动时自动检测 ngrok，获取公网地址并更新二维码。员工微信扫码即可在任何网络打卡。</p></div>
+<div class="card"><div class="inp-row"><input type="text" id="publicUrlInput" placeholder="公网地址" style="flex:0.5"><input type="text" id="projectNameInput" placeholder="项目名称" style="flex:0.3">
+<button class="btn btn-p btn-sm" onclick="updateSettings()">💾 保存</button><button class="btn btn-grn btn-sm" onclick="autoDetectNgrok()">🔍 自动检测</button></div>
+<div class="qr-box"><img id="projQRImg" src="/qr.png" style="max-width:240px"><div style="margin-top:8px;font-weight:600;word-break:break-all" id="qrUrlLabel"></div></div>
+<div style="text-align:center;margin-top:8px"><button class="btn btn-o btn-sm" onclick="downloadQR()">💾 下载</button><button class="btn btn-o btn-sm" onclick="printQR()">🖨 打印</button></div></div></div>
+</div>
+
+<div id="toastBox"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script>
+// ============ STATE ============
+let viewDay=new Date(),viewWeek=getMonday(new Date()),viewMonth=new Date();
+let regStream=null,regModels=false,regMode='',regStaffName='',regEmbedding=null;
+
+function fmt(n){return String(n).padStart(2,'0')}
+function ds(d){return d.getFullYear()+'-'+fmt(d.getMonth()+1)+'-'+fmt(d.getDate())}
+function getMonday(d){const nd=new Date(d);const day=nd.getDay();const diff=day===0?-6:1-day;nd.setDate(nd.getDate()+diff);nd.setHours(0,0,0,0);return nd}
+function dayName(d){return['日','一','二','三','四','五','六'][d.getDay()]}
+async function api(method,data={}){try{const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method,...data})});return await r.json()}catch(e){return{ok:false,error:'网络错误'}}}
+function toast(m,t){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;document.getElementById('toastBox').appendChild(e);setTimeout(()=>e.remove(),2500)}
+
+// ============ TODAY ============
+async function loadToday(){
+  const dt=document.getElementById('dayPick').value;const r=await api('get_records_by_date',{date:dt});const recs=r.records||[];const uniq=new Set(recs.map(x=>x.name)).size;
+  document.getElementById('todayStats').innerHTML='<div class="stat"><div class="v">'+recs.length+'</div><div class="l">签到总次数</div></div><div class="stat"><div class="v">'+uniq+'</div><div class="l">出勤人数</div></div>';
+  const tb=document.getElementById('todayTbody'),em=document.getElementById('todayEmpty');if(!recs.length){tb.innerHTML='';em.style.display=''}else{em.style.display='none';tb.innerHTML=recs.map(x=>'<tr><td><strong>'+x.name+'</strong></td><td>'+x.time+'</td><td>'+(x.confidence?Math.round(x.confidence*100)+'%':'-')+'</td></tr>').join('')}
+}
+function shiftDay(d){const dp=document.getElementById('dayPick');const dt=new Date(dp.value+'T00:00:00');dt.setDate(dt.getDate()+d);dp.value=ds(dt);loadToday()}
+
+// ============ WEEK ============
+async function loadWeek(){
+  const m=viewWeek,ms=ds(m);const en=getMonday(new Date(m));en.setDate(en.getDate()+6);const es=ds(en);document.getElementById('weekLbl').textContent=ms+' ~ '+es;
+  const r=await api('get_records_by_range',{start:ms,end:es});const recs=r.records||[];
+  // Build attendance table: rows=employees, cols=Mon-Sun, cell=time or empty
+  const stf=(await api('get_staff')).staff||[];
+  const days=[];for(let i=0;i<7;i++){const d=new Date(m);d.setDate(d.getDate()+i);days.push(ds(d))}
+  // Map: name -> {day: time}
+  const attend={};recs.forEach(r=>{if(!attend[r.name])attend[r.name]={};attend[r.name][r.date]=r.time});
+  const totalEmp=stf.length;
+  const dailyPresence=days.map(dd=>{let c=0;stf.forEach(s=>{if(attend[s.name]&&attend[s.name][dd])c++});return c});
+  document.getElementById('weekStats').innerHTML='<div class="stat"><div class="v">'+totalEmp+'</div><div class="l">员工总数</div></div><div class="stat"><div class="v">'+Object.keys(attend).length+'</div><div class="l">本周出勤人数</div></div>';
+  // Attendance table
+  let tbl='<table><thead><tr><th>员工</th>'+days.map((d,i)=>'<th>周'+dayName(new Date(m.getTime()+i*86400000))+'<br><small>'+d.slice(5)+'</small></th>').join('')+'<th>出勤天数</th></tr></thead><tbody>';
+  stf.forEach(s=>{
+    let row='<tr><td><strong>'+s.name+'</strong></td>';
+    let presentDays=0;
+    days.forEach(dd=>{const t=attend[s.name]&&attend[s.name][dd];if(t){row+='<td style="background:#dcfce7;color:#166534;font-weight:600">✅ '+t+'</td>';presentDays++}else{row+='<td style="color:#cbd5e1">—</td>'}});
+    row+='<td><strong>'+presentDays+'</strong>/7</td></tr>';
+    tbl+=row;
+  });
+  tbl+='<tr style="background:#f8fafc;font-weight:600"><td>出勤人数</td>'+dailyPresence.map(c=>'<td>'+c+'人</td>').join('')+'<td></td></tr></tbody></table>';
+  document.getElementById('weekTbody').innerHTML=tbl;
+}
+function shiftWeek(d){viewWeek.setDate(viewWeek.getDate()+d*7);loadWeek()}
+
+// ============ MONTH ============
+async function loadMonth(){
+  const mp=document.getElementById('monthPick');const[y,m]=mp.value.split('-').map(Number);viewMonth=new Date(y,m-1,1);const fy=viewMonth.getFullYear(),fm=viewMonth.getMonth();
+  const first=ds(new Date(fy,fm,1)),last=ds(new Date(fy,fm+1,0));const dim=new Date(fy,fm+1,0).getDate();
+  const r=await api('get_records_by_range',{start:first,end:last});const recs=r.records||[];
+  const stf=(await api('get_staff')).staff||[];
+  // Build attendance table
+  const attend={};recs.forEach(r=>{if(!attend[r.name])attend[r.name]={};attend[r.name][r.date]=r.time});
+  // Show first 15 days + last day as summary to keep table readable
+  const showDays=Math.min(dim,31);
+  const dailyCount=[];for(let d=1;d<=showDays;d++){const dd=fy+'-'+fmt(fm+1)+'-'+fmt(d);let c=0;stf.forEach(s=>{if(attend[s.name]&&attend[s.name][dd])c++});dailyCount.push(c)}
+  document.getElementById('monthStats').innerHTML='<div class="stat"><div class="v">'+stf.length+'</div><div class="l">员工总数</div></div><div class="stat"><div class="v">'+Object.keys(attend).length+'</div><div class="l">本月出勤人数</div></div><div class="stat"><div class="v">'+dailyCount.filter(c=>c>0).length+'</div><div class="l">有签到天数</div></div>';
+  // Attendance table: compact, show checkmarks
+  let tbl='<div class="tbl-wrap"><table style="font-size:11px"><thead><tr><th>员工</th>';
+  for(let d=1;d<=showDays;d++){tbl+='<th>'+d+'</th>'}
+  tbl+='<th>出勤</th></tr></thead><tbody>';
+  stf.forEach(s=>{
+    let row='<tr><td style="white-space:nowrap"><strong>'+s.name+'</strong></td>';
+    let cnt=0;
+    for(let d=1;d<=showDays;d++){const dd=fy+'-'+fmt(fm+1)+'-'+fmt(d);if(attend[s.name]&&attend[s.name][dd]){row+='<td style="background:#dcfce7;color:#166534;text-align:center">✅</td>';cnt++}else{row+='<td style="text-align:center;color:#e2e8f0">·</td>'}}
+    row+='<td><strong>'+cnt+'</strong>/'+showDays+'</td></tr>';
+    tbl+=row;
+  });
+  tbl+='<tr style="background:#f8fafc;font-weight:600"><td>出勤人数</td>'+dailyCount.map(c=>'<td style="text-align:center">'+c+'</td>').join('')+'<td></td></tr></tbody></table></div>';
+  document.getElementById('monthTbody').innerHTML=tbl;
+}
+function shiftMonth(d){const mp=document.getElementById('monthPick');const[y,m]=mp.value.split('-').map(Number);const dt=new Date(y,m-1+d,1);mp.value=dt.getFullYear()+'-'+fmt(dt.getMonth()+1);loadMonth()}
+
+// ============ STAFF ============
+async function loadStaffList(){
+  const r=await api('get_staff_with_stats');const staff=r.staff||[];const grid=document.getElementById('empGrid');
+  if(!staff.length){grid.innerHTML='<div class="empty"><div class="icon">👤</div>暂无员工，请添加团队成员</div>';return}
+  grid.innerHTML=staff.map(s=>{
+    const av=s.photo?'<img src="'+s.photo+'" onerror="this.style.display=\'none\'">':'<span style="font-size:22px">👤</span>';
+    return '<div class="emp-card">'+
+      '<div class="emp-avatar" onclick="openRegModal(\'camera\',\''+s.name.replace(/'/g,"\\'")+'\')" title="点击录入人脸">'+av+'</div>'+
+      '<div class="emp-info"><div class="ename">'+s.name+' <span class="badge '+(s.has_photo?'ok':'warn')+'">'+(s.has_photo?'有照片':'无照片')+'</span></div>'+(s.dept?'<div class="edept">'+s.dept+'</div>':'')+'</div>'+
+      '<div class="emp-stats">今日<b>'+s.today+'</b> · 本周<b>'+s.week+'</b> · 本月<b>'+s.month+'</b> · 累计<b>'+s.total+'</b></div>'+
+      '<span style="display:flex;gap:4px"><button class="btn btn-grn btn-sm" onclick="openRegModal(\'camera\',\''+s.name.replace(/'/g,"\\'")+'\')">📷 录入</button><button class="btn btn-red btn-sm" onclick="removeStaff(\''+s.name.replace(/'/g,"\\'")+'\')">删除</button></span>'+
+    '</div>';
+  }).join('')
+}
+async function addStaff(){const n=document.getElementById('newName').value.trim();if(!n){toast('请输入员工姓名','err');return}const r=await api('add_staff',{name:n,dept:document.getElementById('newDept').value.trim()});if(r.ok){document.getElementById('newName').value='';document.getElementById('newDept').value='';loadStaffList();populateSelects();toast('已添加 '+n)}else toast(r.error,'err')}
+async function removeStaff(n){if(!confirm('确定删除 '+n+' 吗？'))return;await api('remove_staff',{name:n});loadStaffList();populateSelects();toast('已删除 '+n)}
+
+// ============ FACE REGISTER ============
+async function openRegModal(mode,nameOverride){
+  regMode=mode;
+  const sel=document.getElementById('regStaffSelect');
+  const name=nameOverride||sel.value;
+  if(!name){toast('请先选择员工','err');return}
+  regStaffName=name;regEmbedding=null;
+
+  document.getElementById('regModal').classList.add('show');
+  document.getElementById('regModalTitle').textContent='📷 人脸录入 - '+name;
+  document.getElementById('regHint').textContent='';
+  document.getElementById('regHint').className='face-hint';
+  document.getElementById('regCaptureBtn').disabled=true;
+  document.getElementById('regVideo').style.display='none';
+  document.getElementById('regCanvas').style.display='none';
+  document.getElementById('regPreview').style.display='none';
+  stopRegStream();
+
+  if(mode==='camera'){
+    if(!regModels){
+      document.getElementById('regHint').textContent='加载人脸识别模型...';
+      document.getElementById('regHint').className='face-hint';
+      try{
+        const M='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        await Promise.all([faceapi.nets.ssdMobilenetv1.loadFromUri(M),faceapi.nets.faceLandmark68Net.loadFromUri(M),faceapi.nets.faceRecognitionNet.loadFromUri(M)]);
+        regModels=true;
+      }catch(e){document.getElementById('regHint').textContent='模型加载失败: '+e.message;document.getElementById('regHint').className='face-hint err';return}
+    }
+    try{
+      regStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
+      const v=document.getElementById('regVideo');v.srcObject=regStream;v.style.display='block';await v.play();
+      document.getElementById('regHint').textContent='请正对摄像头，然后点击拍照录入';
+      document.getElementById('regHint').className='face-hint';
+      document.getElementById('regCaptureBtn').disabled=false;
+    }catch(e){document.getElementById('regHint').textContent='无法访问摄像头: '+e.message;document.getElementById('regHint').className='face-hint err'}
+  }else if(mode==='upload'){
+    document.getElementById('regHint').textContent='请上传员工正面照片（JPG/PNG）';
+    document.getElementById('regHint').className='face-hint';
+    document.getElementById('regFileInput').click();
+  }
+}
+
+function closeRegModal(){
+  document.getElementById('regModal').classList.remove('show');
+  stopRegStream();regStaffName='';regEmbedding=null;
+}
+
+function stopRegStream(){
+  if(regStream){regStream.getTracks().forEach(t=>t.stop());regStream=null}
+}
+
+async function doCapture(){
+  if(!regStaffName){toast('请先选择员工','err');return}
+  document.getElementById('regCaptureBtn').disabled=true;
+  document.getElementById('regHint').textContent='正在检测人脸...';
+  document.getElementById('regHint').className='face-hint';
+
+  if(regMode==='camera'){
+    try{
+      const video=document.getElementById('regVideo');
+      const det=await faceapi.detectSingleFace(video,new faceapi.SsdMobilenetv1Options({minConfidence:0.6})).withFaceLandmarks().withFaceDescriptor();
+      if(!det){document.getElementById('regHint').textContent='❌ 未检测到人脸，请重新拍照';document.getElementById('regHint').className='face-hint err';document.getElementById('regCaptureBtn').disabled=false;return}
+      const embedding=Array.from(det.descriptor);
+      // Draw detection to canvas for visual feedback
+      const canvas=document.getElementById('regCanvas');
+      canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.style.display='block';
+      faceapi.matchDimensions(canvas,{width:video.videoWidth,height:video.videoHeight});
+      const rs=faceapi.resizeResults(det,{width:video.videoWidth,height:video.videoHeight});
+      const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.strokeStyle='#16a34a';ctx.lineWidth=3;ctx.strokeRect(rs.detection.box.x,rs.detection.box.y,rs.detection.box.width,rs.detection.box.height);
+      const r=await api('register_face',{name:regStaffName,embedding});
+      if(r.ok){document.getElementById('regHint').innerHTML='✅ 人脸录入成功！'+regStaffName;document.getElementById('regHint').className='face-hint ok';loadStaffList();loadRegList()}else{document.getElementById('regHint').textContent='保存失败: '+(r.error||'');document.getElementById('regHint').className='face-hint err'}
+    }catch(e){document.getElementById('regHint').textContent='检测失败: '+e.message;document.getElementById('regHint').className='face-hint err';document.getElementById('regCaptureBtn').disabled=false}
+  }
+}
+
+async function handleFileUpload(evt){
+  const file=evt.target.files[0];if(!file)return;
+  document.getElementById('regHint').textContent='正在分析照片中的人脸...';
+  document.getElementById('regHint').className='face-hint';
+
+  if(!regModels){
+    try{
+      const M='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+      await Promise.all([faceapi.nets.ssdMobilenetv1.loadFromUri(M),faceapi.nets.faceLandmark68Net.loadFromUri(M),faceapi.nets.faceRecognitionNet.loadFromUri(M)]);
+      regModels=true;
+    }catch(e){document.getElementById('regHint').textContent='模型加载失败: '+e.message;document.getElementById('regHint').className='face-hint err';return}
+  }
+
+  try{
+    // Read file as image
+    const img=await createImageBitmap(file);
+    const canvas=document.getElementById('regCanvas');
+    canvas.width=img.width;canvas.height=img.height;canvas.style.display='block';
+    const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);
+
+    // Show preview
+    const preview=document.getElementById('regPreview');
+    preview.src=URL.createObjectURL(file);
+    preview.style.display='block';
+
+    // Detect face in uploaded photo
+    const det=await faceapi.detectSingleFace(canvas,new faceapi.SsdMobilenetv1Options({minConfidence:0.6})).withFaceLandmarks().withFaceDescriptor();
+    if(!det){document.getElementById('regHint').textContent='❌ 照片中未检测到人脸，请换一张清晰的正面照片';document.getElementById('regHint').className='face-hint err';return}
+
+    const embedding=Array.from(det.descriptor);
+    const r=await api('register_face',{name:regStaffName,embedding});
+
+    if(r.ok){
+      // Also save the photo itself
+      const photoData=canvas.toDataURL('image/jpeg',0.7);
+      await api('upload_photo',{name:regStaffName,photo:photoData});
+
+      document.getElementById('regHint').innerHTML='✅ 人脸录入成功！'+regStaffName;
+      document.getElementById('regHint').className='face-hint ok';
+      loadStaffList();loadRegList();
+    }else{
+      document.getElementById('regHint').textContent='保存失败: '+(r.error||'');
+      document.getElementById('regHint').className='face-hint err';
+    }
+  }catch(e){document.getElementById('regHint').textContent='分析失败: '+e.message;document.getElementById('regHint').className='face-hint err'}
+}
+
+async function loadRegList(){
+  const r=await api('get_face_embeddings');
+  const reg=(r.embeddings||[]);
+  document.getElementById('registeredList').innerHTML=reg.length
+    ? reg.map(e=>'<span style="display:inline-block;margin:3px 4px;padding:4px 10px;background:#dcfce7;border-radius:12px;font-size:12px;color:#166534;font-weight:500">👤 '+e.name+'</span>').join(' ')
+    : '暂无已录入人脸员工';
+}
+
+async function populateSelects(){
+  const st=(await api('get_staff')).staff||[];
+  document.getElementById('regStaffSelect').innerHTML='<option value="">选择员工...</option>'+st.map(s=>'<option value="'+s.name+'">'+s.name+(s.dept?' ('+s.dept+')':'')+'</option>').join('')
+}
+
+// ============ QR ============
+async function updateSettings(){const r=await api('update_settings',{public_url:document.getElementById('publicUrlInput').value.trim(),project_name:document.getElementById('projectNameInput').value.trim()||'默认项目'});if(r.ok){toast('已保存');document.getElementById('projQRImg').src='/qr.png?'+Date.now();loadQRSettings()}else toast(r.error,'err')}
+async function autoDetectNgrok(){const r=await api('auto_detect_ngrok');if(r.ok){document.getElementById('publicUrlInput').value=r.ngrok_url;loadQRSettings();toast('已检测: '+r.ngrok_url)}else toast(r.error,'err')}
+async function loadQRSettings(){const r=await api('get_settings');document.getElementById('publicUrlInput').value=r.public_url||'';document.getElementById('projectNameInput').value=r.project_name||'';document.getElementById('qrUrlLabel').textContent=r.public_url||window.location.origin}
+function downloadQR(){const i=document.getElementById('projQRImg');const a=document.createElement('a');a.download='打卡二维码.png';a.href=i.src;a.click()}
+function printQR(){const i=document.getElementById('projQRImg');const w=window.open('','_blank');w.document.write('<html><head><title>打卡二维码</title><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:300px}@media print{@page{margin:1cm}}</style></head><body></body></html>');w.document.body.appendChild(i.cloneNode(true));w.document.close();setTimeout(()=>w.print(),400)}
+
+// ============ TAB SWITCH ============
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('open'));
+  document.getElementById('panel-'+t).classList.add('open');
+  if(t==='today')loadToday();if(t==='week')loadWeek();if(t==='month')loadMonth();
+  if(t==='staff')loadStaffList();if(t==='register'){populateSelects();loadRegList()}if(t==='qr')loadQRSettings();
+  if(t!=='register'){stopRegStream();closeRegModal()}
+}
+
+// ============ INIT ============
+async function init(){
+  const today=ds(new Date());document.getElementById('dayPick').value=today;document.getElementById('monthPick').value=today.slice(0,7);
+  document.getElementById('serverUrl').textContent='服务器: '+window.location.origin;
+  document.querySelectorAll('.tab').forEach(tab=>{tab.addEventListener('click',()=>switchTab(tab.dataset.t))});
+  const r=await api('get_stats');document.getElementById('headerInfo').textContent='今日 '+r.today_uniq+'/'+r.total_staff+' 人出勤';
+  loadQRSettings();switchTab('today')
+}
+init();
+</script>
+</body>
+</html>
