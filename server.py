@@ -6,7 +6,7 @@ import qrcode
 
 PORT = int(os.environ.get("PORT", 8080))
 BASE_DIR = Path(__file__).parent.resolve()
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.environ.get("RENDER_DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(exist_ok=True)
 RECORDS_FILE = DATA_DIR / "records.json"
 STAFF_FILE = DATA_DIR / "staff.json"
@@ -268,6 +268,21 @@ def api(data):
     except Exception as e:
         import traceback; traceback.print_exc(); return {"ok": False, "error": str(e)}
 
+# 自动唤醒：服务器启动后30秒开始定期自检
+def start_keepalive():
+    def _ping():
+        while True:
+            time.sleep(600)  # 每10分钟自检一次
+            try:
+                import urllib.request
+                settings = load_settings()
+                url = settings.get("public_url", f"http://localhost:{PORT}")
+                urllib.request.urlopen(f"{url}/api", data=b'{}', timeout=10)
+            except Exception:
+                pass
+    t = threading.Thread(target=_ping, daemon=True)
+    t.start()
+
 def load_html(name):
     p = BASE_DIR / name
     if p.exists(): return p.read_text("utf-8")
@@ -336,6 +351,8 @@ def main():
             except: pass
             time.sleep(10)
     threading.Thread(target=w, daemon=True).start()
+    start_keepalive()
+    print("   🔔 自动唤醒已启用（每10分钟自检）")
     srv = http.server.HTTPServer(("0.0.0.0", PORT), Handler)
     try: srv.serve_forever()
     except KeyboardInterrupt: print("\n   👋 已停止"); kng(); srv.shutdown()
