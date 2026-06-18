@@ -227,7 +227,7 @@ async function openRegModal(mode,nameOverride){
       document.getElementById('regHint').textContent='加载人脸识别模型...';
       document.getElementById('regHint').className='face-hint';
       try{
-        const M='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        const M='https://cdn.jsdelivr.net/gh/kctdeveloper/faceapijs-weights-models@master/weights/';
         await Promise.all([faceapi.nets.ssdMobilenetv1.loadFromUri(M),faceapi.nets.faceLandmark68Net.loadFromUri(M),faceapi.nets.faceRecognitionNet.loadFromUri(M)]);
         regModels=true;
       }catch(e){document.getElementById('regHint').textContent='模型加载失败: '+e.message;document.getElementById('regHint').className='face-hint err';return}
