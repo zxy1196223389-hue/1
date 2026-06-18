@@ -68,7 +68,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script>
-const API='/api', TH=0.8;
+const API='/api', TH=0.7;
 let stream=null,modelsLoaded=false,ld=null,matchRunning=false,done=false,iv=null;
 
 async function callAPI(m,d){try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:m,...d})});return await r.json()}catch(e){return{ok:false,error:'Network error'}}}
