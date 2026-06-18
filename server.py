@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import http.server, json, os, socket, subprocess, sys, threading, time, base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import qrcode
 
 PORT = int(os.environ.get("PORT", 8080))
+TZ = timezone(timedelta(hours=8))  # 北京时间 UTC+8
 BASE_DIR = Path(__file__).parent.resolve()
 DATA_DIR = Path(os.environ.get("RENDER_DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(exist_ok=True)
@@ -25,7 +26,7 @@ def sset(s): sj(SETTINGS_FILE, s)
 
 def checkin(name):
     """签到：同一人同一天只记录第一次，重复不计"""
-    recs = lr(); n = datetime.now()
+    recs = lr(); n = datetime.now(TZ)
     today_str = n.strftime("%Y-%m-%d")
     # 检查今天是否已经签到
     for r in recs:
@@ -105,15 +106,15 @@ def api(data):
             if len(n) > 30: return {"ok": False, "error": "姓名过长"}
             r = checkin(n)
             # 如果返回的 record 时间不是刚刚（意味着已签到过），标记 duplicate
-            now = datetime.now()
+            now = datetime.now(TZ)
             rt = datetime.fromisoformat(r["timestamp"])
             is_dup = (now - rt).seconds > 5  # 超过5秒说明是旧记录
             return {"ok": True, "record": r, "today": grd(now.strftime("%Y-%m-%d")),
                     "duplicate": is_dup, "message": "今日已签到" if is_dup else "签到成功"}
         elif m == "get_today":
-            return {"ok": True, "records": grd(datetime.now().strftime("%Y-%m-%d"))}
+            return {"ok": True, "records": grd(datetime.now(TZ).strftime("%Y-%m-%d"))}
         elif m == "get_records_by_date":
-            return {"ok": True, "records": grd(data.get("date", datetime.now().strftime("%Y-%m-%d")))}
+            return {"ok": True, "records": grd(data.get("date", datetime.now(TZ).strftime("%Y-%m-%d")))}
         elif m == "get_records_by_range":
             return {"ok": True, "records": grr(data.get("start",""), data.get("end",""))}
         elif m == "get_all_records":
@@ -122,9 +123,9 @@ def api(data):
             return {"ok": True, "staff": ls()}
         elif m == "get_staff_with_stats":
             stf = ls(); recs = lr()
-            ts = datetime.now().strftime("%Y-%m-%d")
-            ms = (datetime.now() - timedelta(days=datetime.now().weekday())).strftime("%Y-%m-%d")
-            mf = datetime.now().strftime("%Y-%m") + "-01"
+            ts = datetime.now(TZ).strftime("%Y-%m-%d")
+            ms = (datetime.now(TZ) - timedelta(days=datetime.now(TZ).weekday())).strftime("%Y-%m-%d")
+            mf = datetime.now(TZ).strftime("%Y-%m") + "-01"
             res = []
             for s in stf:
                 nm = s["name"]
@@ -140,7 +141,7 @@ def api(data):
             if not n: return {"ok": False, "error": "姓名不能为空"}
             stf = ls()
             if any(s["name"]==n for s in stf): return {"ok": False, "error": "该员工已存在"}
-            stf.append({"id": datetime.now().strftime("%Y%m%d%H%M%S"), "name": n, "dept": data.get("dept","").strip(), "photo": None})
+            stf.append({"id": datetime.now(TZ).strftime("%Y%m%d%H%M%S"), "name": n, "dept": data.get("dept","").strip(), "photo": None})
             ss(stf); return {"ok": True}
         elif m == "remove_staff":
             n = data.get("name","").strip()
@@ -175,13 +176,13 @@ def api(data):
             for s in stf:
                 if s["name"] == n:
                     s["face_embedding"] = embedding
-                    s["registered_at"] = datetime.now().isoformat()
+                    s["registered_at"] = datetime.now(TZ).isoformat()
                     found = True; break
             if not found:
-                stf.append({"id": datetime.now().strftime("%Y%m%d%H%M%S"), "name": n,
+                stf.append({"id": datetime.now(TZ).strftime("%Y%m%d%H%M%S"), "name": n,
                             "dept": "", "photo": None,
                             "face_embedding": embedding,
-                            "registered_at": datetime.now().isoformat()})
+                            "registered_at": datetime.now(TZ).isoformat()})
             ss(stf); return {"ok": True, "message": f"人脸录入成功: {n}"}
         elif m == "get_face_embeddings":
             """返回所有人脸特征向量(给打卡页面做匹配用)"""
@@ -213,14 +214,14 @@ def api(data):
                 return {"ok": True, "ngrok_url": u, "message": f"已自动配置: {u}"}
             return {"ok": False, "error": "未检测到 ngrok"}
         elif m == "get_stats":
-            stf = ls(); recs = lr(); ts = datetime.now().strftime("%Y-%m-%d")
+            stf = ls(); recs = lr(); ts = datetime.now(TZ).strftime("%Y-%m-%d")
             td = [r for r in recs if r["date"]==ts]
             return {"ok": True, "today_count": len(td), "today_uniq": len(set(r["name"] for r in td)),
                     "total_records": len(recs), "total_staff": len(stf)}
         elif m == "get_leaderboard":
             """领导看板数据：今日出勤概览、员工列表、签到情况"""
             stf = ls(); recs = lr()
-            ts = datetime.now().strftime("%Y-%m-%d")
+            ts = datetime.now(TZ).strftime("%Y-%m-%d")
             today_recs = [r for r in recs if r["date"]==ts]
             today_names = {r["name"]: r["time"] for r in today_recs}
             # 全部员工及其今日状态
@@ -243,7 +244,7 @@ def api(data):
         elif m == "get_leaderboard_week":
             """领导看板：本周考勤表"""
             stf = ls(); recs = lr()
-            monday = datetime.now() - timedelta(days=datetime.now().weekday())
+            monday = datetime.now(TZ) - timedelta(days=datetime.now(TZ).weekday())
             ms = monday.strftime("%Y-%m-%d")
             # 本周7天
             days = []
@@ -289,7 +290,7 @@ def load_html(name):
     return "<h1>Not found</h1>"
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, f, *a): print(f"[{datetime.now().strftime('%H:%M:%S')}] {a[0]}")
+    def log_message(self, f, *a): print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {a[0]}")
     def do_GET(self):
         pt = self.path.split("?")[0]
         if pt == "/" or pt == "/checkin": self._html(load_html("checkin.html"))
@@ -323,24 +324,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 def main():
     ip = gip(); st = lset(); lu = f"http://{ip}:{PORT}"
-    print("="*60+"\n   👤  人脸识别打卡系统\n"+"="*60+"\n")
-    print("   🔍 正在检测 ngrok...")
+    print("="*60)
+    print("   Face Recognition Checkin System")
+    print("="*60)
+    print()
+    print("   Checking ngrok...")
     ok = sng()
     pu = st.get("public_url","").strip()
     if ok and gnu() and not pu:
         st["public_url"]=gnu(); sset(st); pu=gnu()
-    if ok: print(f"   🌐 ngrok 公网: {gnu()}\n   ✅ 自动配置完成")
-    else: print("   ⚠ 未检测到 ngrok")
+    if ok: print(f"   ngrok: {gnu()}")
+    else: print("   ngrok not found")
     print()
     du = pu if pu else lu; rqr()
-    print(f"   🔗 打卡页面:    {du}")
-    print(f"   🖥  管理后台:    {lu}/admin")
-    print(f"   📷 二维码:      {lu}/qr.png")
-    print("\n   📖 使用流程:")
-    print("      1. 管理后台 → 添加员工 → 上传人脸照片")
-    print("      2. 员工微信扫码 → 摄像头人脸识别")
-    print("      3. 识别成功自动签到")
-    print(f"\n   🚀 已启动 (端口 {PORT})\n"+"="*60+"\n")
+    print(f"   Checkin:   {du}")
+    print(f"   Admin:     {lu}/admin")
+    print(f"   Leader:    {lu}/leader")
+    print(f"   QR Code:   {lu}/qr.png")
+    print()
+    print("   Steps:")
+    print("      1. Admin -> Add Staff -> Register Face")
+    print("      2. Staff scan QR -> Face Recognition -> Checkin")
+    print("      3. Leader view: /leader")
+    print(f"\n   Server started (port {PORT})\n"+"="*60+"\n")
     def w():
         while True:
             try:
@@ -352,9 +358,7 @@ def main():
             time.sleep(10)
     threading.Thread(target=w, daemon=True).start()
     start_keepalive()
-    print("   🔔 自动唤醒已启用（每10分钟自检）")
+    print("   Auto-keepalive enabled (10min interval)")
     srv = http.server.HTTPServer(("0.0.0.0", PORT), Handler)
     try: srv.serve_forever()
-    except KeyboardInterrupt: print("\n   👋 已停止"); kng(); srv.shutdown()
-
-if __name__ == "__main__": main()
+    except KeyboardInterrupt: print("Stopped"); kng(); srv.shutdown()
