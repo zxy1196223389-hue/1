@@ -37,32 +37,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 </style>
 </head>
 <body>
-<div class="loading" id="loading">
-  <div style="font-size:48px">👤</div>
-  <h2>正在加载人脸识别模型</h2>
-  <p id="loadText">连接中...</p>
-  <div class="prog"><div class="bar" id="loadBar"></div></div>
-</div>
+<div class="loading" id="loading"><div style="font-size:48px">👤</div><h2>正在加载人脸识别模型</h2><p id="loadText">连接中...</p><div class="prog"><div class="bar" id="loadBar"></div></div></div>
 
 <div class="app" id="app" style="display:none">
   <div class="header"><h1>👤 人脸识别打卡</h1><div class="proj" id="projName">加载中...</div></div>
-  <div class="cam-wrap" id="camWrap">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
+  <div class="cam-wrap" id="camWrap"><video id="video" autoplay playsinline muted></video><canvas id="canvas"></canvas>
     <div class="guide" id="guide"></div>
-    <div class="bar">
-      <div class="status idle" id="status">正在初始化...</div>
-      <div class="match-info" id="matchInfo"></div>
-    </div>
+    <div class="bar"><div class="status idle" id="status">正在初始化...</div><div class="match-info" id="matchInfo"></div></div>
   </div>
 </div>
 
 <div class="overlay" id="result">
-  <div class="icon">✅</div>
-  <h2>签到成功</h2>
-  <div class="name" id="resName"></div>
-  <div class="time" id="resTime"></div>
-  <div class="conf" id="resConf"></div>
+  <div class="icon">✅</div><h2>签到成功</h2><div class="name" id="resName"></div><div class="time" id="resTime"></div><div class="conf" id="resConf"></div>
   <button style="margin-top:24px;padding:12px 40px;background:#4ade80;color:#000;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit" onclick="location.reload()">下一位签到</button>
 </div>
 
@@ -70,94 +56,42 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 <script>
 const API='/api', TH=0.7;
 let stream=null,modelsLoaded=false,ld=null,matchRunning=false,done=false,iv=null;
-
 async function callAPI(m,d){try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:m,...d})});return await r.json()}catch(e){return{ok:false,error:'Network error'}}}
-
 function setLoad(t,p){document.getElementById('loadText').textContent=t;document.getElementById('loadBar').style.width=p+'%'}
-
 async function loadModels(){
   setLoad('Downloading detection model...',15);
   const M='https://cdn.jsdelivr.net/gh/kctdeveloper/faceapijs-weights-models@master/weights/';
-  try{
-    await faceapi.nets.ssdMobilenetv1.loadFromUri(M);
-    setLoad('Downloading landmark model...',40);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(M);
-    setLoad('Downloading recognition model...',65);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(M);
-    setLoad('Models ready',85);modelsLoaded=true;return true
-  }catch(e){setLoad('Model load failed: '+e.message,0);return false}
+  try{await faceapi.nets.ssdMobilenetv1.loadFromUri(M);setLoad('Downloading landmark model...',40);await faceapi.nets.faceLandmark68Net.loadFromUri(M);setLoad('Downloading recognition model...',65);await faceapi.nets.faceRecognitionNet.loadFromUri(M);setLoad('Models ready',85);modelsLoaded=true;return true}catch(e){setLoad('Model load failed: '+e.message,0);return false}
 }
-
-async function loadFaces(){
-  setLoad('Loading registered faces...',90);
-  const r=await callAPI('get_face_embeddings');
-  if(!r.ok||!r.embeddings||!r.embeddings.length){setLoad('No registered faces found',100);return false}
-  ld=r.embeddings.map(e=>new faceapi.LabeledFaceDescriptors(e.name,[new Float32Array(e.embedding)]));
-  setLoad('Loaded '+r.count+' faces',95);return true
-}
-
-async function startCam(){
-  setLoad('Opening camera...',97);
-  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});document.getElementById('video').srcObject=stream;await document.getElementById('video').play();return true}catch(e){setLoad('Camera access denied',100);return false}
-}
-
+async function loadFaces(){setLoad('Loading registered faces...',90);const r=await callAPI('get_face_embeddings');if(!r.ok||!r.embeddings||!r.embeddings.length){setLoad('No registered faces found',100);return false}ld=r.embeddings.map(e=>new faceapi.LabeledFaceDescriptors(e.name,[new Float32Array(e.embedding)]));setLoad('Loaded '+r.count+' faces',95);return true}
+async function startCam(){setLoad('Opening camera...',97);try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});document.getElementById('video').srcObject=stream;await document.getElementById('video').play();return true}catch(e){setLoad('Camera access denied',100);return false}}
 function setStatus(m,c){document.getElementById('status').textContent=m;document.getElementById('status').className='status '+c}
 
 async function startMatch(){
   if(!modelsLoaded||!ld||matchRunning)return;matchRunning=true;done=false;
   const v=document.getElementById('video'),c=document.getElementById('canvas'),ds={width:640,height:480};
   faceapi.matchDimensions(c,ds);setStatus('Please look at the camera','idle');
-  iv=setInterval(async()=>{
-    if(done||!matchRunning){clearInterval(iv);return}
+  let recent=[],decision=null;
+  iv=setInterval(async()=>{if(done||!matchRunning){clearInterval(iv);return}
     try{
-      const det=await faceapi.detectSingleFace(v,new faceapi.SsdMobilenetv1Options({minConfidence:0.5})).withFaceLandmarks().withFaceDescriptor();
+      const det=await faceapi.detectSingleFace(v,new faceapi.SsdMobilenetv1Options({minConfidence:0.3})).withFaceLandmarks().withFaceDescriptor();
       const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
-      if(!det){document.getElementById('guide').className='guide';setStatus('Please look at the camera','idle');return}
-      const rs=faceapi.resizeResults(det,ds),box=rs.detection.box;
+      if(!det){recent=[];document.getElementById('guide').className='guide';setStatus('Please look at the camera','idle');return}
+      const rs=faceapi.resizeResults(det,ds),box=rs.detection.box;ctx.strokeStyle='#4ade80';ctx.lineWidth=3;ctx.strokeRect(box.x,box.y,box.width,box.height);
       const matcher=new faceapi.FaceMatcher(ld,TH);const match=matcher.findBestMatch(det.descriptor);
-      const conf=(1-match.distance);
-      const confPct=Math.round(conf*100);
-      if(match.label!=='unknown' && conf>=TH){
-        // MATCH PASSED >= 80%
-        document.getElementById('guide').className='guide ok';ctx.strokeStyle='#16a34a';ctx.lineWidth=4;
-        ctx.strokeRect(box.x,box.y,box.width,box.height);
-        setStatus('Matched: '+match.label+' ('+confPct+'% >= 80%)','ok');
-        document.getElementById('matchInfo').textContent='Confidence: '+confPct+'% - PASSED';
-        clearInterval(iv);await submit(match.label,conf);
-      }else if(match.label!=='unknown'){
-        // Match below threshold
-        document.getElementById('guide').className='guide no';ctx.strokeStyle='#f87171';ctx.lineWidth=3;
-        ctx.strokeRect(box.x,box.y,box.width,box.height);
-        setStatus('Low confidence: '+match.label+' '+confPct+'% (need >=80%)','err');
-        document.getElementById('matchInfo').textContent='Confidence: '+confPct+'% - REJECTED';
-      }else{
-        // Unknown face
-        document.getElementById('guide').className='guide no';ctx.strokeStyle='#f87171';ctx.lineWidth=3;
-        ctx.strokeRect(box.x,box.y,box.width,box.height);
-        setStatus('Unknown face detected','err');
-        document.getElementById('matchInfo').textContent='Best match: '+confPct+'% (need >=80%)';
-      }
+      const conf=(1-match.distance),pct=Math.round(conf*100);
+      recent.push({name:match.label,conf,dist:match.distance,pass:conf>=TH});
+      if(recent.length>6)recent.shift();
+      const tally={};recent.forEach(m=>{tally[m.name+':'+m.pass]=(tally[m.name+':'+m.pass]||0)+1});
+      const best=Object.entries(tally).sort((a,b)=>b[1]-a[1])[0];
+      if(best&&best[1]>=3){const[nm,ok]=best[0].split(':');if(nm!=='unknown'&&ok==='true'){document.getElementById('guide').className='guide ok';setStatus('Matched: '+nm+' ('+pct+'% >= '+(TH*100)+'%)','ok');clearInterval(iv);await submit(nm,conf)}else if(nm!=='unknown'){setStatus('Low: '+nm+' '+pct+'% (need >='+(TH*100)+'%)','err')}else{setStatus('Unknown face','err')}}else{setStatus('Detecting... ('+recent.length+'/6 samples)','idle')}
     }catch(e){}
-  },600);
+  },500)
 }
 
-async function submit(name,conf){
-  done=true;matchRunning=false;if(iv)clearInterval(iv);setStatus('Recording check-in...','scan');
-  const r=await callAPI('checkin',{name,confidence:conf});
-  if(r.ok){setStatus('','done');document.getElementById('result').classList.add('show');
-    document.getElementById('resName').textContent='Hello, '+name+'!';
-    document.getElementById('resTime').textContent=new Date().toLocaleString('zh-CN');
-    document.getElementById('resConf').textContent='Face match: '+Math.round(conf*100)+'% (>=80%)';
-    stopCam()}else{setStatus('Failed: '+(r.error||''),'err');done=false}
-}
-
+async function submit(name,conf){done=true;matchRunning=false;if(iv)clearInterval(iv);setStatus('Recording check-in...','scan');const r=await callAPI('checkin',{name,confidence:conf});if(r.ok){setStatus('','done');document.getElementById('result').classList.add('show');document.getElementById('resName').textContent='Hello, '+name+'!';document.getElementById('resTime').textContent=new Date().toLocaleString('zh-CN');document.getElementById('resConf').textContent='Face match: '+Math.round(conf*100)+'% (>=70%)';stopCam()}else{setStatus('Failed: '+(r.error||''),'err');done=false}}
 function stopCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
-
-async function init(){
-  const s=await callAPI('get_settings');document.getElementById('projName').textContent='Project: '+(s.project_name||'Default');
-  if(!await loadModels())return;if(!await loadFaces())return;if(!await startCam())return;
-  document.getElementById('loading').classList.add('done');document.getElementById('app').style.display='flex';startMatch()
-}
+async function init(){const s=await callAPI('get_settings');document.getElementById('projName').textContent='Project: '+(s.project_name||'Default');if(!await loadModels())return;if(!await loadFaces())return;if(!await startCam())return;document.getElementById('loading').classList.add('done');document.getElementById('app').style.display='flex';startMatch()}
 window.addEventListener('beforeunload',stopCam);init();
 </script>
 </body>
