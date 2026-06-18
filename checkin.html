@@ -71,33 +71,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 const API='/api', TH=0.8;
 let stream=null,modelsLoaded=false,ld=null,matchRunning=false,done=false,iv=null;
 
-async function callAPI(m,d){try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:m,...d})});return await r.json()}catch(e){return{ok:false,error:'网络错误'}}}
+async function callAPI(m,d){try{const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:m,...d})});return await r.json()}catch(e){return{ok:false,error:'Network error'}}}
+
 function setLoad(t,p){document.getElementById('loadText').textContent=t;document.getElementById('loadBar').style.width=p+'%'}
 
 async function loadModels(){
-  setLoad('下载检测模型...',15);
+  setLoad('Downloading detection model...',15);
   const M='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
   try{
     await faceapi.nets.ssdMobilenetv1.loadFromUri(M);
-    setLoad('下载特征点模型...',40);
+    setLoad('Downloading landmark model...',40);
     await faceapi.nets.faceLandmark68Net.loadFromUri(M);
-    setLoad('下载识别模型...',65);
+    setLoad('Downloading recognition model...',65);
     await faceapi.nets.faceRecognitionNet.loadFromUri(M);
-    setLoad('模型就绪',85);modelsLoaded=true;return true
-  }catch(e){setLoad('模型加载失败:'+e.message,0);return false}
+    setLoad('Models ready',85);modelsLoaded=true;return true
+  }catch(e){setLoad('Model load failed: '+e.message,0);return false}
 }
 
 async function loadFaces(){
-  setLoad('获取已注册人脸...',90);
+  setLoad('Loading registered faces...',90);
   const r=await callAPI('get_face_embeddings');
-  if(!r.ok||!r.embeddings||!r.embeddings.length){setLoad('暂无已注册人脸,请联系管理员',100);return false}
+  if(!r.ok||!r.embeddings||!r.embeddings.length){setLoad('No registered faces found',100);return false}
   ld=r.embeddings.map(e=>new faceapi.LabeledFaceDescriptors(e.name,[new Float32Array(e.embedding)]));
-  setLoad('已加载'+r.count+'人的人脸',95);return true
+  setLoad('Loaded '+r.count+' faces',95);return true
 }
 
 async function startCam(){
-  setLoad('打开摄像头...',97);
-  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});document.getElementById('video').srcObject=stream;await document.getElementById('video').play();return true}catch(e){setLoad('无法访问摄像头,请允许权限后刷新',100);return false}
+  setLoad('Opening camera...',97);
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});document.getElementById('video').srcObject=stream;await document.getElementById('video').play();return true}catch(e){setLoad('Camera access denied',100);return false}
 }
 
 function setStatus(m,c){document.getElementById('status').textContent=m;document.getElementById('status').className='status '+c}
@@ -105,37 +106,55 @@ function setStatus(m,c){document.getElementById('status').textContent=m;document
 async function startMatch(){
   if(!modelsLoaded||!ld||matchRunning)return;matchRunning=true;done=false;
   const v=document.getElementById('video'),c=document.getElementById('canvas'),ds={width:640,height:480};
-  faceapi.matchDimensions(c,ds);setStatus('请正对摄像头','idle');
-  iv=setInterval(async()=>{if(done||!matchRunning){clearInterval(iv);return}
+  faceapi.matchDimensions(c,ds);setStatus('Please look at the camera','idle');
+  iv=setInterval(async()=>{
+    if(done||!matchRunning){clearInterval(iv);return}
     try{
       const det=await faceapi.detectSingleFace(v,new faceapi.SsdMobilenetv1Options({minConfidence:0.5})).withFaceLandmarks().withFaceDescriptor();
       const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
-      if(!det){document.getElementById('guide').className='guide';setStatus('请将面部对准摄像头','idle');return}
-      const rs=faceapi.resizeResults(det,ds),box=rs.detection.box;ctx.strokeStyle='#4ade80';ctx.lineWidth=3;ctx.strokeRect(box.x,box.y,box.width,box.height);
+      if(!det){document.getElementById('guide').className='guide';setStatus('Please look at the camera','idle');return}
+      const rs=faceapi.resizeResults(det,ds),box=rs.detection.box;
       const matcher=new faceapi.FaceMatcher(ld,TH);const match=matcher.findBestMatch(det.descriptor);
-      if(match.label!=='unknown'){
-        document.getElementById('guide').className='guide ok';const conf=Math.round((1-match.distance)*100);
-        setStatus('识别成功: '+match.label,'ok');document.getElementById('matchInfo').textContent='匹配度: '+conf+'%';
-        clearInterval(iv);await submit(match.label,1-match.distance)
-      }else{document.getElementById('guide').className='guide no';setStatus('未识别到已注册人员','err');document.getElementById('matchInfo').textContent=''}
+      const conf=(1-match.distance);
+      const confPct=Math.round(conf*100);
+      if(match.label!=='unknown' && conf>=TH){
+        // MATCH PASSED >= 80%
+        document.getElementById('guide').className='guide ok';ctx.strokeStyle='#16a34a';ctx.lineWidth=4;
+        ctx.strokeRect(box.x,box.y,box.width,box.height);
+        setStatus('Matched: '+match.label+' ('+confPct+'% >= 80%)','ok');
+        document.getElementById('matchInfo').textContent='Confidence: '+confPct+'% - PASSED';
+        clearInterval(iv);await submit(match.label,conf);
+      }else if(match.label!=='unknown'){
+        // Match below threshold
+        document.getElementById('guide').className='guide no';ctx.strokeStyle='#f87171';ctx.lineWidth=3;
+        ctx.strokeRect(box.x,box.y,box.width,box.height);
+        setStatus('Low confidence: '+match.label+' '+confPct+'% (need >=80%)','err');
+        document.getElementById('matchInfo').textContent='Confidence: '+confPct+'% - REJECTED';
+      }else{
+        // Unknown face
+        document.getElementById('guide').className='guide no';ctx.strokeStyle='#f87171';ctx.lineWidth=3;
+        ctx.strokeRect(box.x,box.y,box.width,box.height);
+        setStatus('Unknown face detected','err');
+        document.getElementById('matchInfo').textContent='Best match: '+confPct+'% (need >=80%)';
+      }
     }catch(e){}
-  },600)
+  },600);
 }
 
 async function submit(name,conf){
-  done=true;matchRunning=false;if(iv)clearInterval(iv);setStatus('记录签到...','scan');
+  done=true;matchRunning=false;if(iv)clearInterval(iv);setStatus('Recording check-in...','scan');
   const r=await callAPI('checkin',{name,confidence:conf});
   if(r.ok){setStatus('','done');document.getElementById('result').classList.add('show');
-    document.getElementById('resName').textContent='你好，'+name+'！';
+    document.getElementById('resName').textContent='Hello, '+name+'!';
     document.getElementById('resTime').textContent=new Date().toLocaleString('zh-CN');
-    document.getElementById('resConf').textContent='人脸匹配度: '+Math.round(conf*100)+'%';
-    stopCam()}else{setStatus('失败: '+(r.error||''),'err');done=false}
+    document.getElementById('resConf').textContent='Face match: '+Math.round(conf*100)+'% (>=80%)';
+    stopCam()}else{setStatus('Failed: '+(r.error||''),'err');done=false}
 }
 
 function stopCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
 
 async function init(){
-  const s=await callAPI('get_settings');document.getElementById('projName').textContent='项目: '+(s.project_name||'默认项目');
+  const s=await callAPI('get_settings');document.getElementById('projName').textContent='Project: '+(s.project_name||'Default');
   if(!await loadModels())return;if(!await loadFaces())return;if(!await startCam())return;
   document.getElementById('loading').classList.add('done');document.getElementById('app').style.display='flex';startMatch()
 }
